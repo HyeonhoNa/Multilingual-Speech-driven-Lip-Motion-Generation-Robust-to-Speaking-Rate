@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "description": "Pinned upstream source subset. Hashes and the three local path patches reproduce the existing runtime. Does not fetch weights, datasets, environment archives, or submodules.",
+  "repositories": {
+    "artalk": {
+      "repository": "xg-chu/ARTalk",
+      "commit": "92f6c81b75939f55e42d12f96a141e023d10c22a",
+      "destination": "third_party/ARTalk",
+      "url": "https://github.com/xg-chu/ARTalk.git"
+    },
+    "flexavatar": {
+      "repository": "tobias-kirschstein/flexavatar",
+      "commit": "6e009870cad61150163da30b7ee4fedca316d773",
+      "destination": "third_party/FlexAvatar",
+      "url": "https://github.com/tobias-kirschstein/flexavatar.git"
+    },
+    "modnet": {
+      "repository": "tobias-kirschstein/MODNet",
+      "commit": "b2b64fdb828dafe120e491ddcad94636cf9dfa7f",
+      "destination": "third_party/FlexAvatar_MODNet",
+      "url": "https://github.com/tobias-kirschstein/MODNet.git"
+    },
+    "stylegan": {
+      "repository": "tobias-kirschstein/stylegan-generators",
+      "commit": "6b1dbff11a4c5e09b70aa5d82317531688f04e37",
+      "destination": "third_party/FlexAvatar_stylegan_generators",
+      "url": "https://github.com/tobias-kirschstein/stylegan-generators.git"
+    },
+    "dinov2": {
+      "repository": "facebookresearch/dinov2",
+      "commit": "85a24602099d397264d5b30461ad7f3bfd726ca1",
+      "destination": "third_party/dinov2",
+      "url": "https://github.com/facebookresearch/dinov2.git"
+    },
+    "syncnet": {
+      "repository": "joonson/syncnet_python",
+      "commit": "907c0b579c2e2d83f0eae1b2ac9e720cde4e5623",
+      "destination": "vendor/official_syncnet",
+      "url": "https://github.com/joonson/syncnet_python.git"
+    },
+    "wav2lip": {
+      "repository": "Rudrabha/Wav2Lip",
+      "commit": "bac9a81e63ecc153202353372e5724b83d9e6322",
+      "destination": "vendor/official_syncnet",
+      "source_prefix": "evaluation/scores_LSE",
+      "url": "https://github.com/Rudrabha/Wav2Lip.git"
+    }
+  },
+  "syncnet_overlay": [
+    "SyncNetInstance_calc_scores.py",
+    "calculate_scores_LRS.py",
+    "calculate_scores_real_videos.py",
+    "calculate_scores_real_videos.sh"
+  ],
+  "generated_egg_info": {
+    "flexavatar": {
+      "package": "flexavatar",
+      "pkg_info_headers": [
+        "Metadata-Version: 2.4",
+        "Name: flexavatar",
+        "Version: 0.0.1",
+        "Summary: [CVPR '26] Official Release of FlexAvatar",
+        "Author-email: Tobias Kirschstein <tobias.kirschstein@gmail.com>",
+        "License: Apache 2.0",
+        "Classifier: Development Status :: 3 - Alpha",
+        "Classifier: Programming Language :: Python :: 3",
+        "Classifier: Operating System :: OS Independent",
+        "Requires-Python: >=3.8.0",
+        "Description-Content-Type: text/markdown",
+        "License-File: LICENSE",
+        "Provides-Extra: dev",
+        "Dynamic: license-file"
+      ],
+      "sources_extra": [
+        "LICENSE",
+        "README.md",
+        "pyproject.toml",
+        "setup.py"
+      ],
+      "readme": {
+        "path": "README.md",
+        "sha256": "1cd0e0af764f1ac2d677962dcdfa531aa399218970c8d9730a975ca1f3f0ac82"
+      },
+      "requires": "\n[dev]\n"
+    },
+    "modnet": {
+      "package": "modnet",
+      "pkg_info_headers": [
+        "Metadata-Version: 2.4",
+        "Name: modnet",
+        "Version: 0.0.1",
+        "Summary: <<<ENTER_DESCRIPTION>>>",
+        "Author-email: Tobias Kirschstein <tobias.kirschstein@gmail.com>",
+        "License: Apache 2.0",
+        "Classifier: Development Status :: 3 - Alpha",
+        "Classifier: Programming Language :: Python :: 3",
+        "Classifier: Operating System :: OS Independent",
+        "Requires-Python: >=3.8.0",
+        "Description-Content-Type: text/markdown",
+        "License-File: LICENSE",
+        "Provides-Extra: dev",
+        "Dynamic: license-file"
+      ],
+      "sources_extra": [
+        "LICENSE",
+        "README.md",
+        "pyproject.toml",
+        "test/test_modnet.py"
+      ],
+      "readme": {
+        "path": "README.md",
+        "sha256": "b27738cdfa03121231ef2a05d377d33f282d718161d36fe8c6e245aeddb1fbab"
+      },
+      "requires": "\n[dev]\n"
+    },
+    "stylegan": {
+      "package": "stylegan_generators",
+      "pkg_info_headers": [
+        "Metadata-Version: 2.4",
+        "Name: stylegan_generators",
+        "Version: 0.0.4",
+        "Summary: <<<ENTER_DESCRIPTION>>>",
+        "Author-email: Tobias Kirschstein <tobias.kirschstein@gmail.com>",
+        "License: Apache 2.0",
+        "Classifier: Development Status :: 3 - Alpha",
+        "Classifier: Programming Language :: Python :: 3",
+        "Classifier: Operating System :: OS Independent",
+        "Requires-Python: >=3.8.0",
+        "Description-Content-Type: text/markdown",
+        "Requires-Dist: numpy",
+        "Requires-Dist: scipy",
+        "Requires-Dist: torch",
+        "Requires-Dist: requests",
+        "Requires-Dist: jaxtyping",
+        "Requires-Dist: tqdm",
+        "Provides-Extra: dev"
+      ],
+      "sources_extra": [
+        "pyproject.toml",
+        "setup.py",
+        "test/test_generator.py",
+        "test/test_stylegan2.py"
+      ],
+      "requires": "numpy\nscipy\ntorch\nrequests\njaxtyping\ntqdm\n\n[dev]\n"
+    }
+  },
+  "inventory": "scripts/upstream_inventory.json"
+}
