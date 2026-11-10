@@ -17,6 +17,7 @@ import sys
 import time
 
 from .io import inside, read_json, sha256, write_json
+from .score_output import EVENT_PREFIX, ScorePrinter, print_summary, valid_score
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -134,37 +135,94 @@ def python_for(name):
     return str(path)
 
 
-def run_workers(jobs, output, stage):
+class EventTail:
+    """Read only newly appended worker output, with bounded per-worker buffers."""
+    limit = 64 * 1024
+
+    def __init__(self, path):
+        self.stream = path.open("rb")
+        self.stream.seek(0, os.SEEK_END)
+        self.pending = b""
+        self.discarding = False
+
+    def read(self, callback):
+        data = self.stream.read(self.limit)
+        for index, fragment in enumerate(data.split(b"\n")):
+            if index:
+                if self.pending and not self.discarding and callback:
+                    line = self.pending.decode("utf-8", errors="replace")
+                    if line.startswith(EVENT_PREFIX):
+                        callback(json.loads(line[len(EVENT_PREFIX):]))
+                self.pending = b""
+                self.discarding = False
+            if not self.discarding:
+                self.pending += fragment
+                if len(self.pending) > self.limit:
+                    self.pending = b""
+                    self.discarding = True
+        return bool(data)
+
+
+def stop_group(process, sig):
+    try:
+        os.killpg(process.pid, sig)
+    except ProcessLookupError:
+        pass
+
+
+def run_workers(jobs, output, stage, on_event=None):
     children = []
     try:
         for worker, command in jobs:
             logfile = output / "logs" / (stage + "_%03d.log" % worker)
             logfile.parent.mkdir(parents=True, exist_ok=True)
-            stream = logfile.open("a", encoding="utf-8")
-            process = subprocess.Popen(command, cwd=str(ROOT), env=environment(command[0]),
-                                       stdout=stream, stderr=subprocess.STDOUT, start_new_session=True)
-            children.append((process, stream, logfile))
+            stream = logfile.open("ab")
+            tail = None
+            try:
+                tail = EventTail(logfile)
+                process = subprocess.Popen(command, cwd=str(ROOT), env=environment(command[0]),
+                                           stdout=stream, stderr=subprocess.STDOUT, start_new_session=True)
+            except BaseException:
+                stream.close()
+                if tail:
+                    tail.stream.close()
+                raise
+            children.append((process, stream, logfile, tail))
         failures = []
-        for process, stream, logfile in children:
-            rc = process.wait()
-            stream.close()
-            if rc:
-                failures.append("%s (exit %d)" % (logfile, rc))
+        active = list(children)
+        while active:
+            progressed = False
+            for child in active[:]:
+                process, stream, logfile, tail = child
+                progressed = tail.read(on_event) or progressed
+                rc = process.poll()
+                # Read through EOF after exit, including scores written just before exit.
+                if rc is not None and tail.stream.tell() == os.fstat(tail.stream.fileno()).st_size:
+                    stream.close()
+                    tail.stream.close()
+                    active.remove(child)
+                    if rc:
+                        failures.append("%s (exit %d)" % (logfile, rc))
+            if active and not progressed:
+                time.sleep(0.1)
         if failures:
             raise RuntimeError("Worker failed; completed work is preserved: " + "; ".join(failures))
     finally:
-        for process, stream, logfile in children:
+        for process, stream, logfile, tail in children:
             if process.poll() is None:
-                os.killpg(process.pid, signal.SIGTERM)
-        for process, stream, logfile in children:
-            if process.poll() is None:
-                try:
-                    process.wait(timeout=20)
-                except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
-                    process.wait()
-            if not stream.closed:
+                stop_group(process, signal.SIGTERM)
+        deadline = time.monotonic() + 20
+        for process, stream, logfile, tail in children:
+            try:
+                if process.poll() is None:
+                    try:
+                        process.wait(timeout=max(0, deadline - time.monotonic()))
+                    except subprocess.TimeoutExpired:
+                        stop_group(process, signal.SIGKILL)
+                        process.wait()
+            finally:
                 stream.close()
+                tail.stream.close()
 
 
 def prepare(plan, output):
@@ -216,14 +274,19 @@ def generate(plan, output):
         raise RuntimeError("Generation ended without the full requested cohort")
 
 
-def evaluate(plan, output):
-    generated = generation_manifest(plan, output)
+def evaluate(plan, output, no_average=False):
+    if plan.get("source_run_root"):
+        from .rescore import source_generation
+        generated = source_generation(plan, output, ROOT)
+    else:
+        generated = generation_manifest(plan, output)
     if generated["state"] != "complete":
         raise RuntimeError("Complete generation first; no silent omission of missing videos")
     jobs = []
     for w in plan["workers"]:
         folder = output / "evaluation" / ("%03d" % w["index"])
-        assignment = dict(run_root=str(output), entries=[r for r in generated["entries"] if r["clip"] in w["clips"]])
+        assignment = dict(run_root=plan.get("source_run_root", str(output)),
+                          entries=[r for r in generated["entries"] if r["clip"] in w["clips"]])
         assignment_path = folder / "assignment.json"
         if assignment_path.exists() and read_json(assignment_path) != assignment:
             raise ValueError("Evaluation inputs changed: " + str(assignment_path))
@@ -231,10 +294,14 @@ def evaluate(plan, output):
         jobs.append((w["index"], [python_for("evaluation"), "-m", "tta_pipeline.evaluation_worker",
                      "--repo", str(ROOT), "--output-dir", str(folder), "--gpu", str(w["gpu"]),
                      "--assignment", str(assignment_path)]))
+    printer = ScorePrinter({(c, i) for c in plan["clips"] for i in plan["identities"]})
     try:
-        run_workers(jobs, output, "evaluate")
-    finally:
-        summary = report(output)
+        run_workers(jobs, output, "evaluate", on_event=printer.event)
+    except BaseException as exc:
+        report(output, no_average=no_average, printer=printer,
+               worker_error=str(exc) or type(exc).__name__)
+        raise
+    summary = report(output, no_average=no_average, printer=printer)
     if summary["state"] != "complete":
         raise RuntimeError("Evaluation ended without the complete requested cohort")
 
@@ -246,27 +313,44 @@ def write_csv(path, rows, columns):
         writer.writerows(rows)
 
 
-def report(output):
+def report(output, no_average=False, printer=None, worker_error=None):
     plan = read_json(output / "run.json")
     rows = []
+    failures = []
     for path in sorted((output / "evaluation").glob("*/results.json")):
-        rows.extend(read_json(path).get("scores", []))
+        result = read_json(path)
+        rows.extend(result.get("scores", []))
+        if result.get("error") or result.get("state") == "failed":
+            failure = dict(result.get("failed_cell") or {})
+            failure.setdefault("error", result.get("error") or "Evaluation worker failed")
+            failure["worker"] = path.parent.name
+            failures.append(failure)
+    status_path = output / "status.json"
+    if not worker_error and status_path.exists():
+        status = read_json(status_path)
+        if status.get("state") in ("failed", "interrupted"):
+            worker_error = status.get("error") or "Previous run did not finish successfully"
+    if worker_error and not failures:
+        failures.append(dict(error=worker_error, worker="launcher"))
     expected = {(c, i) for c in plan["clips"] for i in plan["identities"]}
     keys = [(r["clip"], r["identity"]) for r in rows]
     if len(set(keys)) != len(keys) or set(keys) - expected:
         raise ValueError("Duplicate or unexpected official results")
     for row in rows:
-        if row.get("error") or row.get("status") != "ok" or row.get("strict_eligible") is not True or not all(math.isfinite(float(row[k])) for k in ("lse_d", "lse_c")):
+        if not valid_score(row):
             raise ValueError("Failed/nonfinite scores cannot enter the aggregate")
+        row["lse_d"], row["lse_c"] = float(row["lse_d"]), float(row["lse_c"])
         row["pass_both"] = row["lse_d"] <= 6.5 and row["lse_c"] >= 8.0
+        if plan.get("source_run_root") and row.get("video"):
+            row["video"] = str(inside(plan["source_run_root"], row["video"]))
     def stats(group):
         return dict(cells=len(group), lse_d=sum(r["lse_d"] for r in group)/len(group),
                     lse_c=sum(r["lse_c"] for r in group)/len(group),
                     pass_both=sum(r["pass_both"] for r in group)) if group else dict(cells=0, lse_d=None,lse_c=None,pass_both=0)
-    summary = dict(state="complete" if len(rows) == len(expected) else "partial",
+    summary = dict(state="complete" if len(rows) == len(expected) and not failures else "partial",
                    full_fixed_cohort=plan["full_fixed_cohort"], expected_cells=len(expected),
                    checkpoint_step=9000, thresholds=dict(lse_d_max=6.5,lse_c_min=8.0),
-                   updated_utc=now(), **stats(rows))
+                   updated_utc=now(), failures=failures, **stats(rows))
     current_mean_passes = bool(rows and summary["lse_d"] <= 6.5 and summary["lse_c"] >= 8)
     summary["mean_passes"] = current_mean_passes if summary["state"] == "complete" else None
     if summary["state"] != "complete":
@@ -293,24 +377,124 @@ def report(output):
         grouped = [dict(**{key:k},**stats(v)) for k,v in groups.items()]
         grouped.sort(key=lambda r:r["lse_c"],reverse=True)
         write_csv(output / (label+".csv"), grouped, [key,"cells","lse_d","lse_c","pass_both"])
-    print(json.dumps(summary, ensure_ascii=False, indent=2), flush=True)
+    printer = printer or ScorePrinter(expected)
+    for row in rows:
+        printer.score(row, cached=True, source="saved run")
+    for failure in failures:
+        printer.failure(failure)
+    print_summary(summary, no_average=no_average)
     return summary
+
+
+def fixed_cohort(repo):
+    config = read_json(repo / "configs/evaluation.json")
+    entries, identities = config["entries"], config["identities"]
+    by_clip = {entry["clip"]: entry for entry in entries}
+    languages = {entry["language"] for entry in entries}
+    counts = collections.Counter((entry["language"], entry["rate_bin"]) for entry in entries)
+    if len(entries) != 90 or len(by_clip) != 90 or len(identities) != 10 or len(set(identities)) != 10:
+        raise ValueError("The fixed cohort must contain 90 unique clips and 10 unique identities")
+    if (len(languages) != 15 or len(counts) != 45 or set(counts.values()) != {2}
+            or {entry["rate_bin"] for entry in entries} != {"slow", "medium", "fast"}
+            or ("languages" in config and set(config["languages"]) != languages)):
+        raise ValueError("Expected 15 languages x 3 speed bins x 2 recordings")
+    return config, by_clip
+
+
+def reference(no_average=False):
+    config, entries = fixed_cohort(ROOT)
+    expected = {(clip, identity) for clip in entries for identity in config["identities"]}
+    path = ROOT / "reference_results/cell.csv"
+    with path.open(encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream)
+        columns = reader.fieldnames or []
+        if len(set(columns)) != len(columns):
+            raise ValueError("Duplicate reference CSV columns")
+        dk, ck = ("D", "C") if "D" in columns and "C" in columns else ("lse_d", "lse_c")
+        if not {"clip", "identity", "language", "rate_bin", dk, ck}.issubset(columns):
+            raise ValueError("Reference CSV needs clip, identity, language, rate_bin, and D/C columns")
+        raw_rows = list(reader)
+    rows, seen = [], set()
+    for raw in raw_rows:
+        key = raw["clip"], raw["identity"]
+        if key not in expected or key in seen:
+            raise ValueError("Unexpected or duplicate reference cell: %s / %s" % key)
+        entry = entries[raw["clip"]]
+        if any(raw[k] != entry[k] for k in ("language", "rate_bin")):
+            raise ValueError("Reference language/rate metadata differs from the frozen cohort")
+        if (raw.get("error") or ("status" in raw and raw["status"] != "ok")
+                or ("strict_eligible" in raw and str(raw["strict_eligible"]).lower() not in ("true", "1"))):
+            raise ValueError("Failed or ineligible reference score")
+        try:
+            d, c = float(raw[dk]), float(raw[ck])
+        except (TypeError, ValueError, OverflowError):
+            raise ValueError("Reference D/C scores must be finite numbers")
+        if not math.isfinite(d) or not math.isfinite(c):
+            raise ValueError("Reference D/C scores must be finite numbers")
+        rows.append(dict(raw, lse_d=d, lse_c=c, status="ok", strict_eligible=True))
+        seen.add(key)
+    if seen != expected:
+        raise ValueError("Incomplete reference cohort: expected all 900 cells, found %d" % len(seen))
+    printer = ScorePrinter(expected)
+    for row in rows:
+        printer.score(row, cached=True, source="stored reference")
+    summary = dict(state="complete", full_fixed_cohort=True, cells=len(rows), expected_cells=900,
+                   lse_d=sum(r["lse_d"] for r in rows) / len(rows),
+                   lse_c=sum(r["lse_c"] for r in rows) / len(rows))
+    print_summary(summary, no_average=no_average, source="stored reference; no scoring performed")
+    return summary
+
+
+def list_selections():
+    config, entries = fixed_cohort(ROOT)
+    print("Available clips (clip ID, language, rate bin):", flush=True)
+    for entry in entries.values():
+        print("%s\t%s\t%s" % (entry["clip"], entry["language"], entry["rate_bin"]))
+    print("\nIdentity IDs:")
+    for identity in config["identities"]:
+        print(identity)
+    print("\nSelection example: --clips %s --identities %s" %
+          (config["entries"][0]["clip"], config["identities"][0]), flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Frozen ARTalk9000 / AW100 / FlexAvatar official evaluation")
-    parser.add_argument("command", choices=["verify","prepare","generate","evaluate","run","status","report"])
+    parser.add_argument("command", choices=["verify","prepare","generate","evaluate","run","rescore","status","report","reference","list"])
     parser.add_argument("--output", type=Path, default=ROOT / "outputs/tta900")
+    parser.add_argument("--source", type=Path, help="rescore only: existing run containing generated videos")
     parser.add_argument("--gpus", help="Physical GPU indices, e.g. 0,1; default 0 or saved run settings")
     parser.add_argument("--clips", help="Comma-separated exact manifest clip identifiers")
     parser.add_argument("--identities", help="Comma-separated exact identity identifiers; default all ten")
     parser.add_argument("--limit", type=int, help="Smoke test: first N clips, clearly marked partial cohort")
     parser.add_argument("--quick", action="store_true", help="verify only: check sizes without reading file hashes")
+    parser.add_argument("--no-average", action="store_true", help="Print individual scores without terminal means; aggregate files are still written")
     parser.add_argument("--background", action="store_true", help="run only: detach, log and preserve PID")
     args = parser.parse_args()
     if args.limit is not None and not 1 <= args.limit <= 90:
         parser.error("--limit must be between 1 and 90")
     output = args.output.resolve()
+    if args.command in ("reference", "list"):
+        if args.clips or args.identities or args.limit:
+            parser.error("reference and list show the full fixed cohort; selections apply to run/rescore")
+        if args.command == "reference":
+            reference(no_average=args.no_average)
+        else:
+            list_selections()
+        return
+    if args.source and args.command != "rescore":
+        parser.error("--source is supported only for rescore")
+    if args.command == "rescore" and not args.source:
+        parser.error("rescore requires --source pointing to the existing generated run")
+    if args.command == "rescore":
+        source = args.source.resolve()
+        if source == output or source in output.parents or output in source.parents:
+            parser.error("rescore --source and --output must be separate, non-nested directories")
+        if output == ROOT or output in ROOT.parents:
+            parser.error("rescore needs a separate output directory, not the repository root")
+        if ((output / "generation.json").exists()
+                or ((output / "run.json").exists()
+                    and not read_json(output / "run.json").get("source_run_root"))):
+            parser.error("rescore needs a new output directory or an existing rescore output")
     if args.command == "verify":
         verify(ROOT, args.quick)
         return
@@ -318,10 +502,15 @@ def main():
         if not (output / "run.json").exists():
             parser.error("No run found: " + str(output))
         if args.command == "report":
-            report(output)
+            report(output, no_average=args.no_average)
         else:
             status = read_json(output / "status.json") if (output / "status.json").exists() else {}
-            status["generated_cells"] = generation_manifest(read_json(output / "run.json"), output)["completed_cells"]
+            plan = read_json(output / "run.json")
+            if plan.get("source_run_root"):
+                from .rescore import source_generation
+                status["generated_cells"] = len(source_generation(plan, output, ROOT)["entries"])
+            else:
+                status["generated_cells"] = generation_manifest(plan, output)["completed_cells"]
             status["evaluated_cells"] = sum(len(read_json(p).get("scores",[])) for p in (output / "evaluation").glob("*/results.json"))
             print(json.dumps(status, ensure_ascii=False, indent=2))
         return
@@ -345,14 +534,22 @@ def main():
     status = dict(state="running", command=args.command, started_utc=now(), pid=os.getpid())
     write_json(output / "status.json", status)
     try:
-        plan = plan_for(args, output)
+        if args.command == "rescore":
+            from .rescore import plan_for_rescore
+            plan = plan_for_rescore(args, output, ROOT)
+        else:
+            plan = plan_for(args, output)
         verify(ROOT)
-        stages = ["prepare","generate","evaluate"] if args.command == "run" else [args.command]
+        stages = (["prepare","generate","evaluate"] if args.command == "run" else
+                  ["evaluate"] if args.command == "rescore" else [args.command])
         for stage in stages:
             status.update(stage=stage, updated_utc=now())
             write_json(output / "status.json", status)
             print("Starting " + stage + " at " + now(), flush=True)
-            globals()[stage](plan, output)
+            if stage == "evaluate":
+                evaluate(plan, output, no_average=args.no_average)
+            else:
+                globals()[stage](plan, output)
         status.update(state="complete", finished_utc=now())
     except BaseException as exc:
         status.update(state="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed", error=str(exc), finished_utc=now())

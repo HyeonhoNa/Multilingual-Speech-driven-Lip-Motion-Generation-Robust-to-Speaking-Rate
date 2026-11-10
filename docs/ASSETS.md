@@ -15,7 +15,7 @@ Unconfirmed provenance or license terms do not make an asset public domain or au
 | ARTalk base, config, natural style | [ARTalk](https://github.com/xg-chu/ARTalk), its `build_resources.sh`, and [author weights](https://huggingface.co/xg-chu/ARTalk) |
 | Project step-9,000 checkpoint | Separately supplied by the project owner; not available from upstream ARTalk |
 | FlexAvatar FLEX-1 | [Official setup](https://github.com/tobias-kirschstein/flexavatar); [author checkpoint](https://kaldir.vc.cit.tum.de/flexavatar/models/FLEX-1/checkpoints/ckpt-900k.pt) |
-| TOG SRNet/window predictor and statistics | Authorized project/author supply; no verified public source or weight-distribution URL established |
+| TOG SRNet/window predictor and statistics | Confidential transferred technology; supplied only to authorized local installations, never through this public repository |
 | Exact DeepSpeech `output_graph.pb` | Supplied separately. [Mozilla software source](https://github.com/mozilla/DeepSpeech) does not establish this graph's provenance; arbitrary newer graphs are not interchangeable |
 | DINOv2 / MODNet | [DINOv2](https://github.com/facebookresearch/dinov2), [MODNet](https://github.com/ZHKKKe/MODNet) and FlexAvatar's setup |
 | FLAME | [Registration](https://flame.is.tue.mpg.de/) and [edition-specific terms](https://flame.is.tue.mpg.de/modellicense.html) |

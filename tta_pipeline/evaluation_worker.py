@@ -4,12 +4,11 @@
 """Score an assigned list of generated videos, preserving completed cells."""
 import argparse
 import datetime
-import os
-import math
 import signal
 from pathlib import Path
 
 from .io import inside, read_json, sha256, write_json
+from .score_output import emit_failure, emit_score, valid_score
 
 
 def run(args):
@@ -33,12 +32,14 @@ def run(args):
     if len(completed) != len(result["scores"]) or set(completed) - set(assigned_keys):
         raise ValueError("Unexpected or duplicate saved evaluation scores")
     for row in completed.values():
-        if row.get("error") or row.get("status") != "ok" or row.get("strict_eligible") is not True or not all(math.isfinite(float(row[k])) for k in ("lse_d", "lse_c")):
+        if not valid_score(row):
             raise ValueError("Invalid saved official score")
-    result.update(state="running", error=None)
+    result.update(state="running", error=None, failed_cell=None)
     write_json(path, result)
+    current = None
     try:
         for item in assignment["entries"]:
+            current = item
             key = item["clip"], item["identity"]
             video = inside(assignment["run_root"], item["video"])
             digest = sha256(video)
@@ -47,6 +48,7 @@ def run(args):
             if key in completed:
                 if completed[key]["video_sha256"] != digest:
                     raise ValueError(f"Previously scored video changed: {video}")
+                emit_score(completed[key], cached=True)
                 continue
             stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
             attempt = output / "cells" / item["clip"] / item["identity"] / stamp
@@ -56,18 +58,23 @@ def run(args):
                          language=entries[item["clip"]]["language"],
                          rate_bin=entries[item["clip"]]["rate_bin"], video=item["video"],
                          video_sha256=digest)
-            if score.get("error") or score.get("status") != "ok" or score.get("strict_eligible") is not True or not all(score.get(k) is not None and math.isfinite(float(score[k])) for k in ("lse_d","lse_c")):
-                raise RuntimeError(f"Official scoring failed for {key}")
+            if not valid_score(score):
+                raise RuntimeError("Official scoring failed for %s: %s" %
+                                   (key, score.get("error") or "invalid or ineligible score"))
             result["scores"].append(score)
             completed[key] = score
             result["completed_cells"] = len(completed)
             write_json(path, result)
-            print(f"Scored {len(completed)}/{len(assignment['entries'])}: {key[0]} / {key[1]}", flush=True)
+            emit_score(score)
         result["state"] = "complete"
         write_json(path, result)
     except BaseException as exc:
-        result.update(state="failed", error=str(exc))
+        error = str(exc) or type(exc).__name__
+        failure = dict(clip=current["clip"], identity=current["identity"], error=error) if current else None
+        result.update(state="failed", error=error, failed_cell=failure)
         write_json(path, result)
+        if failure:
+            emit_failure(failure)
         raise
 
 

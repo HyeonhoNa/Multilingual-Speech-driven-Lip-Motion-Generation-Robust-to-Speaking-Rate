@@ -46,8 +46,10 @@ does not by itself give permission to relicense the complete checkpoint.
 
 The local-only `tta_pipeline/_runtime/rate.py` and
 `tta_pipeline/_runtime/deepspeech.py` are also excluded from this grant and from
-Git. Their respective TOG/VOCA provenance and permissions must be resolved
-independently. A missing or unverified license is not a public-domain grant.
+Git. AW original code and weights are confidential transferred technology and
+are intentionally withheld from public distribution. Separate VOCA provenance
+and permissions remain applicable. A missing or unverified license is not a
+public-domain grant.
 
 See [docs/ASSETS.md](docs/ASSETS.md) for acquisition information. This license
 change does not delete or replace the complete local TTA installation.

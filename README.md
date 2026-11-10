@@ -37,7 +37,7 @@ Use `--gpus 0,1` when two GPUs are available. Repeat the same command to resume.
 | `summary.json` | Completion count, averages and thresholds |
 | `logs/`, `evaluation/` | Progress and evaluator receipts |
 
-Generation uses adaptive pooling strength 1.0 without per-recording fitting. Wav2Lip/LatentSync image replacement is not part of generation; Wav2Lip contributes scoring scripts here. The original local runbook is retained at `local_docs/TTA_RUNBOOK.md`.
+Generation uses adaptive pooling strength 1.0 without per-recording fitting. Wav2Lip/LatentSync image replacement is not part of generation; Wav2Lip contributes scoring scripts here. See [server commands and live score output](docs/SERVER_TESTING.md) for saved scores, selected generation, full generation and video rescoring. The exact [LSE formulas, official reference code and papers](docs/LSE_METRICS.md) are documented separately. The original local runbook is retained at `local_docs/TTA_RUNBOOK.md`.
 
 ## Acquire author source separately
 
@@ -48,7 +48,7 @@ python3 scripts/fetch_upstreams.py --check
 
 The standard-library tool downloads the required source subset directly from pinned official repositories into Git-ignored `third_party/` and `vendor/`. It checks hashes, applies three documented local-path patches and retains license notices. Valid files are reused; edited files are never overwritten. It does not download weights/data/private modules, run upstream setup scripts, or install native renderer dependencies.
 
-Models, data and exact deployment configuration must be obtained separately as described in [ASSETS.md](docs/ASSETS.md). TOG network/VOCA preprocessing compatibility modules remain installed locally but are excluded from Git; TOG state-dictionary weights alone cannot implement the network architecture.
+Models, data and exact deployment configuration must be obtained separately as described in [ASSETS.md](docs/ASSETS.md). AW/TOG original code and weights are confidential transferred technology and are not published. TOG network/VOCA preprocessing compatibility modules remain installed locally but are excluded from Git; TOG state-dictionary weights alone cannot implement the network architecture. Published adapters only connect authorized local components.
 
 ## Attribution and release checks
 
