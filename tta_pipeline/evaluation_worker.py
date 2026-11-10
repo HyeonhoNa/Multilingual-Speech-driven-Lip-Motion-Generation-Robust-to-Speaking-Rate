@@ -1,3 +1,6 @@
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Score an assigned list of generated videos, preserving completed cells."""
 import argparse
 import datetime

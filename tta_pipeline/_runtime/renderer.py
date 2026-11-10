@@ -1,10 +1,15 @@
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Project FLEX-1 integration with a pinned source camera and matte guard.
 
 Adapted from the project experiments public10_common30_renderer_v1.py,
 public10_matte_guard_v1.py, and flex_artalk_render_v1.py. This wrapper uses
 externally installed FlexAvatar, gaussian_splatting, visage, and MODNet APIs.
-PinnedMODNet retains the visage MODNetMatter initialization convention while
-loading an explicit local checkpoint; its empty-matte fallback is project code.
+PinnedMODNet adapts the Apache-2.0 MODNet demo initialization for tensor inputs
+and an explicit local checkpoint; its empty-matte fallback is project code.
+The surrounding visage MODNetMatter class is an external dependency with its
+own terms; MODNet attribution is not a license grant for visage.
 Model architectures, rendering kernels, and weights remain external assets.
 Only filesystem routing and historical experiment receipt checks differ from
 the local experiment integration.
@@ -79,11 +84,21 @@ class Renderer(nn.Module):
 
         class PinnedMODNet(MODNetMatter):
             def __init__(self):
-                self._transform = transforms.Compose([transforms.Normalize((.5, .5, .5), (.5, .5, .5))])
-                self._modnet = nn.DataParallel(MODNet(backbone_pretrained=False)).cuda()
+                # Initialization adapted directly from the Apache-2.0 MODNet demo:
+                # https://github.com/tobias-kirschstein/MODNet/blob/
+                # b2b64fdb828dafe120e491ddcad94636cf9dfa7f/demo/image_matting/colab/inference.py
+                # License: LICENSES/Apache-2.0.txt (original upstream portions).
+                # Changes: tensors already supplied (no ToTensor), CUDA required,
+                # local checkpoint read on CPU with weights_only=True.
+                normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                self._transform = transforms.Compose([normalize])
+                model = MODNet(backbone_pretrained=False)
+                model = nn.DataParallel(model)
+                model = model.cuda()
                 weights = torch.load(paths['modnet_weights'], map_location='cpu', weights_only=True)
-                self._modnet.load_state_dict(weights)
-                self._modnet.eval()
+                model.load_state_dict(weights)
+                model.eval()
+                self._modnet = model
 
             def parse(self, *args, **kwargs):
                 alpha = super().parse(*args, **kwargs)

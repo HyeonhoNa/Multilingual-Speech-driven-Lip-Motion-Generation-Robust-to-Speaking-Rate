@@ -1,3 +1,6 @@
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Unpack exact Linux x86_64 environments offline into this repository."""
 import argparse
 import hashlib

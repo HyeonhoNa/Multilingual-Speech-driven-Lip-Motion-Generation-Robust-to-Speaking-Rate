@@ -1,3 +1,6 @@
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """ARTalk-derived inference adapter with project chunk-context handling.
 
 Adapted through experiments/neural_renderer_lse/artalk_generator_lora_v1.py

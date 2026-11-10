@@ -1,3 +1,6 @@
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Project tensor adapter between ARTalk motion and FLEX-1 expression inputs.
 
 Extracted from experiments/neural_renderer_lse/flex_lora_differentiable_v1.py.

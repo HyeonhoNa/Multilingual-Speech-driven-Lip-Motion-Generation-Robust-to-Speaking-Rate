@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Speaking-rate Gaussian pooling for the project's ARTalk integration.
 
 Derived from the project experiment artalk_rate_window_diagnostic.py.

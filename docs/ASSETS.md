@@ -2,6 +2,12 @@
 
 Git contains no model weights, audio, transcripts, photographs or prepared identities. The complete local TTA deployment retains these in ignored directories.
 
+## Separate asset rights
+
+The project's [GPL grant](../LICENSING.md) and [dependency additional permission](../DEPENDENCY_EXCEPTION.md) do not license model weights, checkpoints, training/evaluation data, photographs, or derived asset files. This includes the project-specific step-9,000 fine-tuned ARTalk checkpoint: local fine-tuning does not place it under the source-code license or remove applicable upstream model/data conditions. Obtain each asset under its own terms; a source-code license or download link is not a substitute for an asset license.
+
+Unconfirmed provenance or license terms do not make an asset public domain or authorize redistribution or commercial use. See [THIRD_PARTY.md](../THIRD_PARTY.md) for the observed terms and unresolved cases. These publication boundaries leave the complete local TTA deployment retained on disk.
+
 ## Models
 
 | Required asset | Author source / acquisition |

@@ -1,3 +1,6 @@
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Unmodified, pinned official CLI scoring with explicit media-extent audits.
 
 This is an external orchestrator, not an implementation of the LSE formula.

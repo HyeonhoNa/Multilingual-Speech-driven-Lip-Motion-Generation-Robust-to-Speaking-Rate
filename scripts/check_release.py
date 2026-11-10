@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Inspect staged Git objects; local ignored TTA assets remain untouched."""
 import json
 from pathlib import Path, PurePosixPath
@@ -7,7 +10,7 @@ import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-TOP_FILES = {".gitignore", "README.md", "THIRD_PARTY.md", "CITATIONS.bib"}
+TOP_FILES = {".gitignore", "README.md", "THIRD_PARTY.md", "CITATIONS.bib", "LICENSE", "LICENSING.md", "DEPENDENCY_EXCEPTION.md"}
 TOP_DIRS = {"tta_pipeline", "scripts", "tests", "docs", "LICENSES"}
 PRIVATE_MODULES = {"tta_pipeline/_runtime/rate.py", "tta_pipeline/_runtime/deepspeech.py"}
 BINARY = {".pt", ".pth", ".ckpt", ".model", ".pb", ".safetensors", ".npy", ".npz",
@@ -39,6 +42,11 @@ def main():
             errors.append(name + ": binary or unexpectedly large object")
         if PRIVATE_PATH.search(content):
             errors.append(name + ": private deployment path")
+    required = {"LICENSE", "LICENSING.md", "DEPENDENCY_EXCEPTION.md", "THIRD_PARTY.md",
+                "LICENSES/ARTalk.txt", "LICENSES/Apache-2.0.txt",
+                "LICENSES/FlexAvatar-CC-BY-NC-4.0.txt", "LICENSES/README.md"}
+    for missing in sorted(required - set(names)):
+        errors.append(missing + ": required license/scope notice missing from Git index")
     if not names:
         errors.append("No files staged/tracked. Run git add on the intended source files first.")
     if errors:

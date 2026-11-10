@@ -8,6 +8,12 @@ Integration and evaluation code combining TOG adaptive-window controls, wav2vec 
 
 A source clone alone does not include the trained deployment. The project-specific step-9,000 checkpoint is not the upstream ARTalk checkpoint. See [required assets](docs/ASSETS.md), [environment setup](docs/ENVIRONMENT.md) and [attribution](THIRD_PARTY.md).
 
+## License
+
+Project-authored portions are licensed under the [GNU GPL version 3 only](LICENSE), with the specific GPLv3 §7 additional permission in [DEPENDENCY_EXCEPTION.md](DEPENDENCY_EXCEPTION.md). See [LICENSING.md](LICENSING.md) for the scope of this grant. ARTalk-derived portions retain their MIT notices.
+
+External code and snippets, model weights (including the project-specific step-9,000 fine-tuned checkpoint), and data are outside this project's GPL grant and retain their applicable terms. The complete pipeline is **not automatically licensed for commercial use**: upstream noncommercial restrictions and other conditions remain in force. See [THIRD_PARTY.md](THIRD_PARTY.md) for origins and observed terms, and [ASSETS.md](docs/ASSETS.md) for separately supplied assets.
+
 ## Run the complete local installation
 
 From the prepared local project directory:

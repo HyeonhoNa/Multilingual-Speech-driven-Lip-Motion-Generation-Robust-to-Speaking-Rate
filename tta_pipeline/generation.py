@@ -1,3 +1,6 @@
+# Project-authored portions: GNU GPL version 3 only.
+# See LICENSE, LICENSING.md and DEPENDENCY_EXCEPTION.md.
+# Third-party portions retain their original notices and licenses.
 """Project AW100 + ARTalk step9000 + FLEX-1 inference orchestration.
 
 Connects the project rate/pooling, chunk rollout, and renderer adapters derived
